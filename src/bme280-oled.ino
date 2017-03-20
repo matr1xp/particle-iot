@@ -24,11 +24,10 @@
 ********************************************************************************************/
 #include <Wire.h>
 #include <Adafruit_SSD1306_RK.h>
+#include "settings.h"
 #include <Adafruit_BME280.h>
 #include <string>
-
 #include "font.h"
-#include "settings.h"
 
 int loop_display = 0;
 int loop_publish = 0;
