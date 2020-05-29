@@ -2,7 +2,7 @@
 
 Projects for IoT using [Particle Photon](Core).
 
-![Particle Photon Pinout](/res/photon_pinout.png)
+![Particle Photon Pinout](/res/photon_pinout.png)   ![Blynk app screenshot](/res/photon_bme280_blynk_app.jpg)
 
 ## Sensors
 1. BME280 - an environmental sensor that reads temperature, barometric pressure and humidity.
@@ -20,3 +20,6 @@ Projects for IoT using [Particle Photon](Core).
 
 ### Notes
 1. If you plan to use the Blynk integration, rename or delete `bme280-oled.ino` when compiling and vice-versa (`bme280-oled-blynk.ino`). Only 1 instance of the *.ino file should exist.
+
+
+![Testboard Image](/res/photon_bme280_oled_testboard.jpg)
