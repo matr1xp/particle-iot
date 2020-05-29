@@ -112,7 +112,7 @@ void setup()   {
 	// We can alert at anywhere between 1% - 32%:
 	lipo.setThreshold(20); // Set alert threshold to 20%.
 
-  Blynk.begin(auth, BLYNK_IP);  //blocking call, should be last in setup()
+  Blynk.begin(auth);  //blocking call, should be last in setup(), pass 2nd paramer BLYNK_IP for private server
 }
 
 void loop() {
