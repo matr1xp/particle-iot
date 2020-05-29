@@ -3,7 +3,6 @@
 Projects for IoT using [Particle Photon](Core).
 
 ![Particle Photon Pinout](/res/photon_pinout.png)
-![Blynk app screenshot](/res/photon_bme280_blynk_app.jpg =250x250)
 
 ## Sensors
 1. BME280 - an environmental sensor that reads temperature, barometric pressure and humidity.
