@@ -17,3 +17,6 @@ Projects for IoT using [Particle Photon](Core).
 [Particle Photon]: https://docs.particle.io/guide/getting-started/intro/core/
 [Particle]: https://www.particle.io/
 [Blynk]: https://blynk.cc
+
+### Notes
+1. If you plan to use the Blynk integration, rename or delete `bme280-oled.ino` when compiling and vice-versa (`bme280-oled-blynk.ino`). Only 1 instance of the *.ino file should exist.
