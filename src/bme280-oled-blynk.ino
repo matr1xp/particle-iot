@@ -43,7 +43,7 @@
 #define BLYNK_HEARTBEAT 60000 
 
 #include <blynk.h>
-char auth[] = "3536ede03dff4e6989712fd5d77bf52f"; //Blynk Authorization
+char auth[] = "<Your Authorization Code>"; //Blynk Authorization
 
 double voltage = 0.0F; // Variable to keep track of LiPo voltage
 double soc = 0.0F; // Variable to keep track of LiPo state-of-charge (SOC)
