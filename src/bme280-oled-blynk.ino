@@ -18,7 +18,8 @@
   clear (delay_seconds) - Clears OLED display
   sensor (command)    - Display or publish BME280 sensor data;
                         Use `blynk` command to publish to Blynk server,
-                        otherwise display on OLED, `stop` to stop all readings
+                        otherwise display on OLED
+  toggle (command)    - Turn sensor ON (1 or non-zero) or OFF (0)
   battery (command)   - Display or publish Battery information;
                         Use `blynk` command to publish, otherwise display on OLED
  Particle Variables:
@@ -39,19 +40,18 @@
 
 #include "SparkFunMAX17043.h" // Include the SparkFun MAX17043 library
 
-#define BLYNK_HEARTBEAT 60
-#define BLYNK_PRINT     Serial  // Set serial output for debug prints
-#define BLYNK_IP        IPAddress(192,168,0,5) //Local Blynk server IP
+#define BLYNK_HEARTBEAT 60000 
 
 #include <blynk.h>
-char auth[] = "<Enter your Authorization Code Here>"; //Blynk Authorization
+char auth[] = "3536ede03dff4e6989712fd5d77bf52f"; //Blynk Authorization
 
-double voltage = 0; // Variable to keep track of LiPo voltage
-double soc = 0; // Variable to keep track of LiPo state-of-charge (SOC)
-bool alert; // Variable to keep track of whether alert has been triggered
+double voltage = 0.0F; // Variable to keep track of LiPo voltage
+double soc = 0.0F; // Variable to keep track of LiPo state-of-charge (SOC)
+bool alert = false; // Variable to keep track of whether alert has been triggered
 
 int oled_display = 0;
 int blynk_publish = 1;
+int status = 1;
 
 //BME Sensor variables
 double temperature = 0.0F;
@@ -63,8 +63,12 @@ double altitude = 0.0F;
 Adafruit_BME280 bme; // I2C
 Adafruit_SSD1306 display(-1);
 
+BlynkTimer timer;
+
 void setup()   {
   Serial.begin(9600);
+  delay(5000); // Allow board to settle
+
   // Initialize and powerup our display
   display.begin(SSD1306_SWITCHCAPVCC, SSD1306_ADDRESS);
   // Show image buffer on the display hardware.
@@ -75,9 +79,11 @@ void setup()   {
   display.clearDisplay();
   display.display();
 
+  // Initialize Particle functions and variables
   Particle.function("text", displayText);
   Particle.function("clear", displayClear);
   Particle.function("sensor", readSensor);
+  Particle.function("toggle", toggleSensor);
   Particle.function("battery", getBatteryInfo);
 
   Particle.variable("temp", temperature);
@@ -86,18 +92,21 @@ void setup()   {
   Particle.variable("humidity", humidity);
   Particle.variable("altitude", altitude);
 
-  if (!bme.begin(0x76)) {
-      displayText("Could not find a valid BME280 sensor, check wiring!");
-  } else {
-    Serial.println("Found BME280 I2C address: 0x76!");
-    displayText("+ Device ready! \n\n(4) commands found:\nsensor, battery, text, clear\n");
-    displayClear("");
-  }
-
+  Particle.variable("status", status);
   // Set up Spark variables (voltage, soc, and alert):
 	Particle.variable("voltage", voltage);
 	Particle.variable("soc", soc);
 	Particle.variable("alert", alert);
+
+  if (!bme.begin(0x76)) {
+      displayText("Could not find a valid BME280 sensor, check wiring!");
+  } else {
+    Serial.println("Found BME280 I2C address: 0x76!");
+    Particle.publish("BME280 sensor", "1");
+    displayText("+ Device ready! \n\n(4) commands found:\nsensor, battery, text, clear\n");
+    displayClear("");
+  }
+
 	// To read the values from a browser, go to:
 	// http://api.particle.io/v1/devices/{DEVICE_ID}/{VARIABLE}?access_token={ACCESS_TOKEN}
 
@@ -112,26 +121,32 @@ void setup()   {
 	// We can alert at anywhere between 1% - 32%:
 	lipo.setThreshold(20); // Set alert threshold to 20%.
 
-  Blynk.begin(auth);  //blocking call, should be last in setup(), pass 2nd paramer BLYNK_IP for private server
+  Blynk.begin(auth);  //blocking call, should be last in setup()  
+
+  timer.setInterval(BLYNK_HEARTBEAT, updateBlynk);
 }
 
 void loop() {
-  Blynk.run();
-
-  if (oled_display > 0) {
-    readSensor("display");
+  if (status == 1) {
+    if (oled_display > 0) {
+      readSensor("display");
+    }    
+    if (blynk_publish > 0) {
+      Blynk.run();
+      bool result = Blynk.connected();
+      if (!result) {
+        result = Blynk.connect();
+        Blynk.syncAll();
+      }
+      /*
+      readSensor("blynk");
+      getBatteryInfo("blynk");
+      */
+      timer.run();
+    }    
+    //delay(REFRESH_INTERVAL);
+    delay(2000);
   }
-  if (blynk_publish > 0) {
-    bool result = Blynk.connected();
-    if (!result) {
-      Blynk.connect();
-      Blynk.syncAll();
-    }
-    readSensor("blynk");
-    getBatteryInfo("blynk");
-  }
-
-  delay(REFRESH_INTERVAL);
 }
 
 int readSensor(String command) {
@@ -141,16 +156,8 @@ int readSensor(String command) {
   sealevelpressure = bme.seaLevelForAltitude(altitude, pressure);
   humidity = bme.readHumidity();
   if (command == "blynk") {
-    Blynk.virtualWrite(V0, String::format("%.02f", temperature));
-    Blynk.virtualWrite(V1, String::format("%.02f", humidity));
-    Blynk.virtualWrite(V2, String::format("%.02f", pressure));
-    Blynk.virtualWrite(V3, String::format("%.02f", sealevelpressure));
-    Blynk.virtualWrite(V4, String::format("%.02f", altitude));
-    return 2;
-  } else if (command == "stop") {
-    oled_display = 0;
-    blynk_publish = 0;
-    return 0;
+    updateBlynk();
+    return 1;
   } else { //Default display to OLED
     String data = "";
     data.concat("Temperature: "+String::format("%.02f C\n", temperature));
@@ -164,10 +171,22 @@ int readSensor(String command) {
   }
 }
 
+int toggleSensor(String command) {
+  status = atoi(command) > 0 ? 1 : 0;
+  Particle.variable("status", status);
+  Particle.publish("SENSOR status", status > 0 ? "STARTED" : "STOPPED");
+  return status;
+}
+
 int getBatteryInfo(String command) {
   voltage = lipo.getVoltage();
   soc = lipo.getSOC();
   alert = lipo.getAlert();
+
+  Particle.variable("voltage", voltage);
+	Particle.variable("soc", soc);
+	Particle.variable("alert", alert);
+
   String s_data = String::format("Voltage: %.02f \nSOC:  %.02f \nAlert:  %d\n", voltage, soc, alert);
   if (command == "blynk") {
     Blynk.virtualWrite(V5, String::format("%.02f", voltage));
@@ -183,7 +202,7 @@ int displayClear(String command) {
   if (command == "") {
     Serial.print("Clearing display in ");
     Serial.print(SCREEN_CLEAR/1000);
-    Serial.println(" seconds...\n");
+    Serial.println(" seconds...\n");    
     delay(SCREEN_CLEAR);
   } else {
     int _delay = atoi(command);
@@ -194,6 +213,7 @@ int displayClear(String command) {
   display.clearDisplay();
   display.display();
   oled_display = 0;
+  Particle.publish("OLED cleared", "true");
   Serial.println("Display cleared.");
   return 1;
 }
@@ -206,4 +226,20 @@ int displayText(String text) {
   display.display();
   display.setFont();
   return 1;
+}
+
+void updateBlynk() {
+  temperature = bme.readTemperature();
+  altitude = bme.readAltitude(SEALEVELPRESSURE_HPA);
+  pressure =  ( bme.readPressure()/100.0F );
+  sealevelpressure = bme.seaLevelForAltitude(altitude, pressure);
+  humidity = bme.readHumidity();
+  
+  Blynk.virtualWrite(V0, String::format("%.02f", temperature));
+  Blynk.virtualWrite(V1, String::format("%.02f", humidity));
+  Blynk.virtualWrite(V2, String::format("%.02f", pressure));
+  Blynk.virtualWrite(V3, String::format("%.02f", sealevelpressure));
+  Blynk.virtualWrite(V4, String::format("%.02f", altitude));
+
+  getBatteryInfo("blynk");
 }
